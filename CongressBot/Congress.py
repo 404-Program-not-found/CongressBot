@@ -500,4 +500,4 @@ async def on_ready():
         await asyncio.sleep(60)
 
 
-bot.run('NzQ5MDk0NzQ1MzI1ODMwMTk0.X0m-2A._ZH-Hl5Qutpwe2GvWaV7w_8GX9Y')
+bot.run('Token')
