@@ -43,11 +43,11 @@ class vote_master():
         master_list = {"giverole": ["Give Role of", " to "], "addchannel": ["Add the channel of", ""],
                        "givepower": ["Give power of", " to "], "demote": ["Remove the role of", " from "],
                        "misc": ["", ""]}
-        # try:
-        return master_list[command.lower()]
-        # except KeyError:
-        #     await errormsg(ctx)
-        #     return False
+        try:
+            return master_list[command.lower()]
+        except KeyError:
+            await util.errormsg(ctx)
+            return False
 
     async def action(self, ctx, command, embedVar):
         if command[0].lower() == "misc" or command[0].lower() == "addchannel":
@@ -73,33 +73,31 @@ class vote_master():
                     return message.author == ctx.author and message.channel == msg.channel and re.search(
                         r'^#(?:[0-9a-fA-F]{1,2}){3}$', reply.content.lower())
 
-                while not x:
-                    reply = await bot.wait_for('message', check=check)
-                    role = await ctx.guild.create_role(name=string.capwords(str(command[2])),
-                                                       colour=discord.Colour(
-                                                           int(f"0x{reply.content.lower().replace('#', '')}", 0)),
-                                                       hoist=True,
-                                                       reason="voted in")
-                    await ctx.message.author.add_roles(
-                        role)
-                    try:
-                        await role.edit(position=highest.position)
-                        embedVar = discord.Embed(
-                            title=f"{bot.get_emoji(751553187529490513)} Confirmed! Enjoy your new role!",
-                            color=0x00c943)
-                        await ctx.author.send(embed=embedVar)
-                    except discord.Forbidden or discord.HTTPException:
-                        embedVar = discord.Embed(
-                            title=f"{bot.get_emoji(751653673628860476)} Sorry, something went wrong on our end. You will"
-                                  f" still receive your role. Please contact an administrator for more info",
-                            color=0xfff30a)
-                        await ctx.author.send(embed=embedVar)
-                    return
-                else:
+                reply = await bot.wait_for('message', check=check)
+                role = await ctx.guild.create_role(name=string.capwords(str(command[2])),
+                                                   colour=discord.Colour(
+                                                       int(f"0x{reply.content.lower().replace('#', '')}", 0)),
+                                                   hoist=True,
+                                                   reason="voted in")
+                await ctx.message.author.add_roles(role)
+                try:
+                    await role.edit(position=highest.position)
                     embedVar = discord.Embed(
-                        title=f"{bot.get_emoji(751553187453992970)} That is not a valid hex code",
-                        color=0xc20000)
+                        title=f"{bot.get_emoji(751553187529490513)} Confirmed! Enjoy your new role!",
+                        color=0x00c943)
                     await ctx.author.send(embed=embedVar)
+                except discord.Forbidden or discord.HTTPException:
+                    embedVar = discord.Embed(
+                        title=f"{bot.get_emoji(751653673628860476)} Sorry, something went wrong on our end. You will"
+                              " still receive your role. Please contact an administrator for more info",
+                        color=0xfff30a)
+                    await ctx.author.send(embed=embedVar)
+                return
+            else:
+                embedVar = discord.Embed(
+                    title=f"{bot.get_emoji(751553187453992970)} That is not a valid hex code",
+                    color=0xc20000)
+                await ctx.author.send(embed=embedVar)
         else:
             await ctx.message.author.add_roles(
                 discord.utils.get(ctx.guild.roles, name=string.capwords(str(command[2]))))
@@ -111,11 +109,42 @@ class vote_master():
 
 util = Utilities(bot)
 
+class vote_main():
+    async def vote(self, ctx, command, members: commands.Greedy[discord.Member], *, name):
+        classmaster = vote_master()
+        Yes = bot.get_emoji(749126458164641813)
+        No = bot.get_emoji(749126458521157632)
+        target = ", ".join(x.name for x in members)
+        role = util.rolefunc(ctx)
+        master = await classmaster.checking(ctx, command)
+        if not master or not await classmaster.demote_check(ctx, command, name, members):
+            return
+        if str(ctx.guild.owner.name) in target:
+            embedVar = discord.Embed(
+                title=f"{bot.get_emoji(751553187453992970)} Votes cannot affect the server's owner",
+                color=0xc20000)
+            await ctx.send(embed=embedVar)
+            return
+        if not target and master[0]:
+            target = "themselves"
+        if target:
+            target = target + " "
+        embedVar = discord.Embed(title="Vote", description="{0} {2}{3}{1}".format(master[0], target, name, master[1]),
+                                 color=0xffbf00)
+        waittime = util.getsave(ctx, "Time", "time_value")
+        embedVar.add_field(name="Vote will last for {0}".format(util.convert(waittime)),
+                           value="\u200b")
+        embedVar.set_footer(text=f"Vote Created by {ctx.message.author}", icon_url=ctx.message.author.avatar_url)
+        sent_message = await ctx.send(" ".join(role), embed=embedVar)
+        await sent_message.add_reaction(No)
+        await sent_message.add_reaction(Yes)
+
 
 # vote command
 @bot.command()
 @commands.guild_only()
 async def vote(ctx, command, members: commands.Greedy[discord.Member], *, name):
+    print(members)
     classmaster = vote_master()
     Yes = bot.get_emoji(749126458164641813)
     No = bot.get_emoji(749126458521157632)
@@ -151,9 +180,6 @@ async def vote(ctx, command, members: commands.Greedy[discord.Member], *, name):
         cache.reactions.index(matching[1])].count:
         await ctx.send("{} Vote Passed".format(" ".join([roles for roles in role])), embed=embedVar)
         await vote_master().action(ctx, [command, members, name], embedVar)
-    else:
-        await ctx.send("error: Something Went Wrong! Please contact Alex about this. Error Code 100")
-        return
 
 
 @vote.error
@@ -411,6 +437,7 @@ async def halt(ctx, *, msg):
                     break
     exit("Emergency stop")
 
+
 @bot.command()
 @commands.is_owner()
 async def announce(ctx, *, msg):
@@ -446,6 +473,7 @@ async def announce(ctx, *, msg):
                     continue
                 else:
                     break
+
 
 @bot.command()
 @commands.guild_only()
@@ -490,7 +518,6 @@ async def on_ready():
                  "...I do not want art for a few; any more than education for a few; or freedom for a few...",
                  "it is the people who control the Government, not the Government the people."]
     print('We have logged in as {0.user}'.format(bot))
-    print(bot.is_ready())
     while bot.is_ready():
         await bot.change_presence(activity=discord.Game(name="!help for help"))
         await asyncio.sleep(60)
@@ -500,4 +527,4 @@ async def on_ready():
         await asyncio.sleep(60)
 
 
-bot.run('Token')
+bot.run('token')
