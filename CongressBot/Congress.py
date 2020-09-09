@@ -6,6 +6,8 @@ import random
 import string
 import traceback
 import json
+import os
+from enum import Enum
 import datetime
 from CongressBot.Congress_Utilities import Utilities
 
@@ -26,13 +28,21 @@ bot = commands.Bot(command_prefix=determine_prefix)
 bot.remove_command("help")
 
 
+class Emoji(Enum):
+    YES = 749126458164641813
+    NO = 749126458521157632
+    ERROR = 751553187453992970
+    OKAY = 751553187529490513
+    WARNING = 751653673628860476
+
+
 class vote_master():
     async def demote_check(self, ctx, command, name, target):
-        if target == "": target = [ctx.message.author]
-        name = discord.utils.get(ctx.guild.roles, name=name)
+        if not target: target = [ctx.message.author]
+        name = discord.utils.get(ctx.guild.roles, name=string.capwords(name))
         if command == "demote" and not all(name in sl.roles for sl in target):
             embedVar = discord.Embed(
-                title=f"{bot.get_emoji(751553187453992970)} Role not found/Specified user does not have that role",
+                title=f"{bot.get_emoji(Emoji.ERROR.value)} Role not found/Specified user does not have that role",
                 color=0xc20000)
             await ctx.send(embed=embedVar)
             return False
@@ -56,7 +66,7 @@ class vote_master():
         elif command[0].lower() == "demote":
             for i in command[1]:
                 try:
-                    await i.remove_roles(discord.utils.get(ctx.guild.roles, name=command[2]))
+                    await i.remove_roles(discord.utils.get(ctx.guild.roles, name=string.capwords(str(command[2]))))
                 except:
                     print('error: cannot find role')
                     await ctx.guild.owner.send(
@@ -83,50 +93,187 @@ class vote_master():
                 try:
                     await role.edit(position=highest.position)
                     embedVar = discord.Embed(
-                        title=f"{bot.get_emoji(751553187529490513)} Confirmed! Enjoy your new role!",
+                        title=f"{bot.get_emoji(Emoji.OKAY.value)} Confirmed! Enjoy your new role!",
                         color=0x00c943)
                     await ctx.author.send(embed=embedVar)
                 except discord.Forbidden or discord.HTTPException:
                     embedVar = discord.Embed(
-                        title=f"{bot.get_emoji(751653673628860476)} Sorry, something went wrong on our end. You will"
+                        title=f"{bot.get_emoji(Emoji.WARNING.value)} Sorry, something went wrong on our end. You will"
                               " still receive your role. Please contact an administrator for more info",
                         color=0xfff30a)
                     await ctx.author.send(embed=embedVar)
                 return
             else:
                 embedVar = discord.Embed(
-                    title=f"{bot.get_emoji(751553187453992970)} That is not a valid hex code",
+                    title=f"{bot.get_emoji(Emoji.ERROR.value)} That is not a valid hex code",
                     color=0xc20000)
                 await ctx.author.send(embed=embedVar)
         else:
             await ctx.message.author.add_roles(
                 discord.utils.get(ctx.guild.roles, name=string.capwords(str(command[2]))))
             embedVar = discord.Embed(
-                title=f"{bot.get_emoji(751553187529490513)} Confirmed! Enjoy your new role!",
+                title=f"{bot.get_emoji(Emoji.OKAY.value)} Confirmed! Enjoy your new role!",
                 color=0x00c943)
             await ctx.author.send(embed=embedVar)
 
 
-util = Utilities(bot)
+util = Utilities(bot, Emoji.ERROR.value)
+
 
 class vote_main():
-    async def vote(self, ctx, command, members: commands.Greedy[discord.Member], *, name):
-        classmaster = vote_master()
-        Yes = bot.get_emoji(749126458164641813)
-        No = bot.get_emoji(749126458521157632)
+    async def action(self, guild, embedVar, position):
+        data = json.load(open("CongressVoting.json", "r"))
+        data = data[str(guild.id)][position]
+        command = [data["command"], data["targets"], data['desc']]
+        author = bot.get_guild(data["guild_id"]).get_member(data["author_id"])
+        if command[0].lower() == "misc" or command[0].lower() == "addchannel":
+            await guild.owner.send(
+                f"A vote in the {guild.name} server has just passed that requires manual implementation",
+                embed=embedVar)
+        elif command[0].lower() == "demote":
+            if any(guild.me.top_role < bot.get_guild(data["guild_id"]).get_member(int(sl)).top_role for sl in
+                   command[1]):
+                print('Permission Error')
+                await guild.owner.send(
+                    f"A vote in the {guild.name} server has just passed that requires manual implementation due to "
+                    "a permission error, we are sorry for the inconvenience. Tip: to avoid similar errors in the "
+                    "future, move the bot's role in the hierarchy to be directly below moderator positions.",
+                    embed=embedVar)
+                return
+            for i in command[1]:
+                try:
+                    await bot.get_guild(data["guild_id"]).get_member(int(i)).remove_roles(
+                        discord.utils.get(guild.roles, name=string.capwords(str(command[2]))))
+                except:
+                    print('error: cannot find role')
+                    await guild.owner.send(
+                        f"A vote in the {guild.name} server has just passed that requires manual implementation due to an error, we are "
+                        "sorry for the inconvenience",
+                        embed=embedVar)
+        elif command[0].lower() == "giverole":
+            x = False
+            print("giverole ")
+            if not discord.utils.get(guild.roles, name=string.capwords(str(command[2]))):
+                highest = [command[1][0]]
+                if len(command[1]):
+                    for i in range(1, len(command[1])):
+                        highest.append(int(command[1][i]))
+                    msg = await author.send("What colour do you want the role to be? (reply in hex)")
+                print(highest)
+
+                def check(message):
+                    return message.author == author and message.channel == msg.channel and re.search(
+                        r'^#(?:[0-9a-fA-F]{1,2}){3}$', message.content.lower())
+
+                reply = await bot.wait_for('message', check=check)
+                role = await guild.create_role(name=string.capwords(str(command[2])),
+                                               colour=discord.Colour(
+                                                   int(f"0x{reply.content.lower().replace('#', '')}", 0)),
+                                               hoist=True,
+                                               reason="voted in")
+                print(embedVar)
+                if any(guild.me.top_role <= bot.get_guild(data["guild_id"]).get_member(int(sl)).top_role for sl in
+                       command[1]):
+                    print('Permission Error')
+                    await guild.owner.send(
+                        f"A vote in the {guild.name} server has just passed that requires manual implementation due to "
+                        "a permission error, we are sorry for the inconvenience. Tip: to avoid similar errors in the "
+                        "future, move the bot's role in the hierarchy to be directly below moderator positions.",
+                        embed=embedVar)
+                    return
+                user = []
+                for i in command[1]:
+                    await bot.get_guild(data["guild_id"]).get_member(int(i)).add_roles(role)
+                for i in range(0, len(highest)):
+                    user = user + (bot.get_guild(int(data["guild_id"])).get_member(int(highest[i])).roles)
+                    print(user)
+                user = sorted(user, key=lambda r: r.position)
+                highest = discord.utils.find(lambda role: role in guild.roles,
+                                             reversed(user))
+                print(highest)
+                await role.edit(position=int(highest.position))
+                embedVar = discord.Embed(
+                    title=f"{bot.get_emoji(Emoji.OKAY.value)} Confirmed! Role given!",
+                    color=0x00c943)
+                await author.send(embed=embedVar)
+            else:
+                role = discord.utils.get(guild.roles, name=string.capwords(str(command[2])))
+                highest = [command[1][0]]
+                if not role:
+                    if len(command[1]):
+                        for i in range(1, len(command[1])):
+                            highest.append(int(command[1][i]))
+                user = []
+                for i in range(0, len(highest)):
+                    user = user + (bot.get_guild(int(data["guild_id"])).get_member(int(highest[i])).roles)
+                    print(user)
+                for i in command[1]:
+                    await bot.get_guild(data["guild_id"]).get_member(int(i)).add_roles(role)
+                user = sorted(user, key=lambda r: r.position)
+                highest = discord.utils.find(lambda role: role in guild.roles,
+                                             reversed(user))
+                print(highest)
+                print(embedVar)
+                if any(guild.me.top_role <= bot.get_guild(data["guild_id"]).get_member(int(sl)).top_role for sl in
+                       command[1]):
+                    print('Permission Error')
+                    await guild.owner.send(
+                        f"A vote in the {guild.name} server has just passed that requires manual implementation due to a permission error, we are "
+                        "sorry for the inconvenience. Tip: to avoid similar errors in the future, move the bot's role in "
+                        "the hierarchy to be directly below moderator positions.",
+                        embed=embedVar[0])
+                    return
+                await role.edit(position=int(highest.position))
+                embedVar = discord.Embed(
+                    title=f"{bot.get_emoji(Emoji.OKAY.value)} Confirmed! Role given!",
+                    color=0x00c943)
+                await author.send(embed=embedVar)
+
+        data = json.load(open("CongressVoting.json", "r"))
+
+        del data[str(guild.id)][position]
+        if len(data[str(guild.id)]) == 0:
+            del data[str(guild.id)]
+        json.dump(data, open("CongressVoting.json", 'w'))
+        return
+
+    async def demote_check(self, ctx, command, name, target):
+        if not target: target = [ctx.message.author]
+        name = discord.utils.get(ctx.guild.roles, name=string.capwords(name))
+        if command == "demote" and not all(name in sl.roles for sl in target):
+            embedVar = discord.Embed(
+                title=f"{bot.get_emoji(Emoji.ERROR.value)} Role not found/Specified user does not have that role",
+                color=0xc20000)
+            await ctx.send(embed=embedVar)
+            return False
+        else:
+            return True
+
+    async def checking(self, ctx, command, target, members):
+        master_list = {"giverole": ["Give Role of", " to "], "addchannel": ["Add the channel of", ""],
+                       "givepower": ["Give power of", " to "], "demote": ["Remove the role of", " from "],
+                       "misc": ["", ""]}
+        if not target and master_list[command.lower()][0]:
+            target = ctx.message.author.name
+            members = [ctx.message.author]
+        try:
+            return target, members, master_list[command.lower()]
+        except KeyError:
+            await util.errormsg(ctx)
+            return False
+
+    async def vote(self, ctx, command, members, name):
         target = ", ".join(x.name for x in members)
         role = util.rolefunc(ctx)
-        master = await classmaster.checking(ctx, command)
-        if not master or not await classmaster.demote_check(ctx, command, name, members):
+        target, member, master = await self.checking(ctx, command, target, members)
+        if not master or not await self.demote_check(ctx, command, name, members):
             return
         if str(ctx.guild.owner.name) in target:
             embedVar = discord.Embed(
-                title=f"{bot.get_emoji(751553187453992970)} Votes cannot affect the server's owner",
+                title=f"{bot.get_emoji(Emoji.ERROR.value)} Votes cannot affect the server's owner",
                 color=0xc20000)
             await ctx.send(embed=embedVar)
             return
-        if not target and master[0]:
-            target = "themselves"
         if target:
             target = target + " "
         embedVar = discord.Embed(title="Vote", description="{0} {2}{3}{1}".format(master[0], target, name, master[1]),
@@ -134,27 +281,87 @@ class vote_main():
         waittime = util.getsave(ctx, "Time", "time_value")
         embedVar.add_field(name="Vote will last for {0}".format(util.convert(waittime)),
                            value="\u200b")
-        embedVar.set_footer(text=f"Vote Created by {ctx.message.author}", icon_url=ctx.message.author.avatar_url)
+        embedVar.set_footer(text=f"Vote Created by {ctx.message.author} • "
+                                 + datetime.datetime.utcnow().date().strftime('%d/%b/%Y'),
+                            icon_url=ctx.message.author.avatar_url)
         sent_message = await ctx.send(" ".join(role), embed=embedVar)
-        await sent_message.add_reaction(No)
-        await sent_message.add_reaction(Yes)
+        await sent_message.add_reaction(bot.get_emoji(Emoji.NO.value))
+        await sent_message.add_reaction(bot.get_emoji(Emoji.YES.value))
+        data = json.load(open("CongressVoting.json", "r"))
+        other_data = json.load(open("CongressSaves.json", "r"))['time_value'][str(ctx.guild.id)]
+        if data.get(str(ctx.guild.id)):
+            data[str(ctx.guild.id)].append(
+                {'time': datetime.datetime.strftime(ctx.message.created_at + datetime.timedelta(seconds=other_data),
+                                                    '%Y-%m-%d %H:%M:%S.%f'),
+                 "command": str(command), "desc": str(name),
+                 "targets": list(str(members[i].id) for i in range(0, len(members))),
+                 "message_id": int(sent_message.id), "channel_id": int(ctx.message.channel.id),
+                 "guild_id": int(ctx.guild.id), "author_id": int(ctx.author.id)})
+        else:
+            data[str(ctx.guild.id)] = [
+                {'time': datetime.datetime.strftime(ctx.message.created_at + datetime.timedelta(seconds=other_data),
+                                                    '%Y-%m-%d %H:%M:%S.%f'),
+                 "command": str(command), "desc": str(name),
+                 "targets": list(str(members[i].id) for i in range(0, len(members))),
+                 "message_id": int(sent_message.id), "channel_id": int(ctx.message.channel.id),
+                 "guild_id": int(ctx.guild.id), "author_id": int(ctx.author.id)}]
+        json.dump(data, open("CongressVoting.json", "w"))
+        await self.voting_processing(len(data[str(ctx.guild.id)]) - 1, str(ctx.guild.id))
+
+    async def voting_processing(self, placement: int, guild_id: str):
+        data = json.load(open("CongressVoting.json", "r"))
+        data = data[str(guild_id)][placement]
+        await discord.utils.sleep_until(datetime.datetime.strptime(data['time'], '%Y-%m-%d %H:%M:%S.%f'))
+        print("heh")
+        channel = await bot.get_channel(data["channel_id"]).fetch_message(data['message_id'])
+        await self.action(bot.get_guild(data["guild_id"]),
+                          channel.embeds[0], json.load(open("CongressVoting.json", "r"))[str(guild_id)].index(data))
+
+
+@bot.command()
+@commands.guild_only()
+async def votexperimental(ctx, command, members: commands.Greedy[discord.Member], *, name):
+    await vote_main().vote(ctx, command, members, name)
+
+
+@votexperimental.error
+async def votexperimental_error(ctx, error):
+    if isinstance(error, commands.CheckFailure):
+        embedVar = discord.Embed(
+            title=f"{bot.get_emoji(Emoji.ERROR.value)} You do not have the permission to do that",
+            color=0xc20000)
+        await ctx.send(embed=embedVar)
+    elif isinstance(error, commands.MissingPermissions):
+        print('Permission Error')
+        await ctx.guild.owner.send(
+            "A vote has just passed that requires manual implementation due to a permission error, we are "
+            "sorry for the inconvenience. Tip: to avoid similar errors in the future, move the bot's role in "
+            "the hierarchy to be directly below moderator positions.",
+            embed=ctx.message.embeds[0])
+    elif isinstance(error, commands.NoPrivateMessage):
+        embedVar = discord.Embed(
+            title=f"{bot.get_emoji(Emoji.ERROR.value)} You can only do that in a server!",
+            color=0xc20000)
+        await ctx.send(embed=embedVar)
+    else:
+        print('Ignoring exception in command {}:'.format(ctx.command))
+        traceback.print_exception(type(error), error, error.__traceback__, )
+        await util.errormsg(ctx)
 
 
 # vote command
 @bot.command()
 @commands.guild_only()
 async def vote(ctx, command, members: commands.Greedy[discord.Member], *, name):
-    print(members)
     classmaster = vote_master()
-    Yes = bot.get_emoji(749126458164641813)
-    No = bot.get_emoji(749126458521157632)
     target = ", ".join(x.name for x in members)
+    print(target)
     role = util.rolefunc(ctx)
     master = await classmaster.checking(ctx, command)
     if not master or not await classmaster.demote_check(ctx, command, name, members): return
     if str(ctx.guild.owner.name) in target:
         embedVar = discord.Embed(
-            title=f"{bot.get_emoji(751553187453992970)} Votes cannot affect the server's owner",
+            title=f"{bot.get_emoji(Emoji.ERROR.value)} Votes cannot affect the server's owner",
             color=0xc20000)
         await ctx.send(embed=embedVar)
         return
@@ -167,11 +374,11 @@ async def vote(ctx, command, members: commands.Greedy[discord.Member], *, name):
                        value="\u200b")
     embedVar.set_footer(text=f"Vote Created by {ctx.message.author}", icon_url=ctx.message.author.avatar_url)
     sent_message = await ctx.send(" ".join(role), embed=embedVar)
-    await sent_message.add_reaction(No)
-    await sent_message.add_reaction(Yes)
+    await sent_message.add_reaction(bot.get_emoji(Emoji.NO.value))
+    await sent_message.add_reaction(bot.get_emoji(Emoji.YES.value))
     await asyncio.sleep(waittime)
     cache = await ctx.fetch_message(id=sent_message.id)
-    matching = [s for s in cache.reactions if Yes or No in s]
+    matching = [s for s in cache.reactions if bot.get_emoji(Emoji.YES.value) or bot.get_emoji(Emoji.NO.value) in s]
     if cache.reactions[cache.reactions.index(matching[0])].count >= cache.reactions[
         cache.reactions.index(matching[1])].count:
         await ctx.send("{} Vote Failed to Pass".format(" ".join([roles for roles in role])), embed=embedVar)
@@ -182,9 +389,9 @@ async def vote(ctx, command, members: commands.Greedy[discord.Member], *, name):
         await vote_master().action(ctx, [command, members, name], embedVar)
 
 
-@vote.error
-async def vote_error(ctx, error):
-    await util.error_core(ctx, error)
+# @vote.error
+# async def vote_error(ctx, error):
+#     await util.error_core(ctx, error)
 
 
 @bot.command()
@@ -267,11 +474,10 @@ async def multichoice_error(ctx, error):
 async def settime(ctx, time: int):
     data = json.load(open("CongressSaves.json", "r"))
     data["time_value"][str(ctx.guild.id)] = int(time)
-    with open("CongressSaves.json", "w") as file:
-        json.dump(data, file)
+    json.dump(data, open("CongressSaves.json", "w"))
     time = util.convert(time)
     embedVar = discord.Embed(
-        title=f"{bot.get_emoji(751553187529490513)} Confirmed! The new voting time is {time}!",
+        title=f"{bot.get_emoji(Emoji.OKAY.value)} Confirmed! The new voting time is {time}!",
         color=0x00c943)
     await ctx.send(embed=embedVar)
 
@@ -302,7 +508,7 @@ async def setrole(ctx, roles: discord.role.Role):
         if str(roles.id) in data["Mentionable_Roles"][str(ctx.guild.id)]:
             data["Mentionable_Roles"][str(ctx.guild.id)].remove(str(roles.id))
             embedVar = discord.Embed(
-                title="{} Confirmed! I will no longer mention {} every vote!".format(bot.get_emoji(751553187529490513),
+                title="{} Confirmed! I will no longer mention {} every vote!".format(bot.get_emoji(Emoji.OKAY.value),
                                                                                      roles.name),
                 color=0x00c943)
             await ctx.send(embed=embedVar)
@@ -312,7 +518,7 @@ async def setrole(ctx, roles: discord.role.Role):
                        in
                        range(0, len(data["Mentionable_Roles"][str(ctx.guild.id)]))]
             embedVar = discord.Embed(
-                title="{} Confirmed! I will now mention {} every vote!".format(bot.get_emoji(751553187529490513),
+                title="{} Confirmed! I will now mention {} every vote!".format(bot.get_emoji(Emoji.OKAY.value),
                                                                                ", ".join(list(tempvar[i].name for i in
                                                                                               range(0, len(tempvar))))),
                 color=0x00c943)
@@ -321,12 +527,11 @@ async def setrole(ctx, roles: discord.role.Role):
         data["Mentionable_Roles"][str(ctx.guild.id)] = []
         data["Mentionable_Roles"][str(ctx.guild.id)].append(str(roles.id))
         embedVar = discord.Embed(
-            title="{} Confirmed! I will now mention {} every vote!".format(bot.get_emoji(751553187529490513),
+            title="{} Confirmed! I will now mention {} every vote!".format(bot.get_emoji(Emoji.OKAY.value),
                                                                            roles.name),
             color=0x00c943)
         await ctx.send(embed=embedVar)
-    with open("CongressSaves.json", "w") as file:
-        json.dump(data, file)
+    json.dump(data, open("CongressSaves.json", "w"))
 
 
 @setrole.error
@@ -340,10 +545,9 @@ async def setrole_error(ctx, error):
 async def commandprefix(ctx, prefix):
     data = json.load(open("CongressSaves.json", "r"))
     data["Command_Prefix"][str(ctx.guild.id)] = str(prefix)
-    with open("CongressSaves.json", "w") as file:
-        json.dump(data, file)
+    json.dump(data, open("CongressSaves.json", "w"))
     embedVar = discord.Embed(
-        title=f"{bot.get_emoji(751553187529490513)} Confirmed! The new prefix is {prefix}!",
+        title=f"{bot.get_emoji(Emoji.OKAY.value)} Confirmed! The new prefix is {prefix}!",
         color=0x00c943)
     await ctx.send(embed=embedVar)
     bot.command_prefix = prefix
@@ -359,13 +563,17 @@ async def commandprefix_error(ctx, error):
 @commands.guild_only()
 async def readroles(ctx):
     data = json.load(open("CongressSaves.json", "r"))
-    tempvar = [discord.utils.get(ctx.guild.roles, id=int(data["Mentionable_Roles"][str(ctx.guild.id)][i])) for i
-               in
-               range(0, len(data["Mentionable_Roles"][str(ctx.guild.id)]))]
-    embedVar = discord.Embed(
-        title="The pinged roles are {}".format(", ".join(list(tempvar[i].name for i in
-                                                              range(0, len(tempvar))))),
-        color=0x00058f)
+    if data["Mentionable_Roles"].get(str(ctx.guild.id)):
+        data = [discord.utils.get(ctx.guild.roles, id=int(data["Mentionable_Roles"][str(ctx.guild.id)][i])) for i
+                in range(0, len(data["Mentionable_Roles"][str(ctx.guild.id)]))]
+        embedVar = discord.Embed(
+            title="The pinged roles are {}".format(", ".join(list(data[i].name for i in
+                                                                  range(0, len(data))))),
+            color=0x00058f)
+    else:
+        embedVar = discord.Embed(
+            title=f"{bot.get_emoji(Emoji.WARNING.value)} No pinged roles, type !setrole @role to add your first role to the list!",
+            color=0xfff30a)
     await ctx.send(embed=embedVar)
 
 
@@ -373,18 +581,18 @@ async def readroles(ctx):
 async def readrole_error(ctx, error):
     if isinstance(error, commands.CheckFailure):
         embedVar = discord.Embed(
-            title=f"{bot.get_emoji(751553187453992970)} You do not have the permission to do that",
+            title=f"{bot.get_emoji(Emoji.ERROR.value)} You do not have the permission to do that",
             color=0xc20000)
         await ctx.send(embed=embedVar)
     elif isinstance(error, commands.NoPrivateMessage):
         embedVar = discord.Embed(
-            title=f"{bot.get_emoji(751553187453992970)} You can only do that in a server!",
+            title=f"{bot.get_emoji(Emoji.ERROR.value)} You can only do that in a server!",
             color=0xc20000)
         await ctx.send(embed=embedVar)
     if isinstance(getattr(error, "original", error), KeyError):
         embedVar = discord.Embed(
-            title=f"{bot.get_emoji(751553187453992970)} No pinged roles, type !setrole @role to add your first role to the list!",
-            color=0xc20000)
+            title=f"{bot.get_emoji(Emoji.WARNING.value)} No pinged roles, type !setrole @role to add your first role to the list!",
+            color=0xfff30a)
         await ctx.send(embed=embedVar)
     else:
         print('Ignoring exception in command {}:'.format(ctx.command))
@@ -416,7 +624,7 @@ async def halt(ctx, *, msg):
         await ctx.send("Aborted")
         return
     msg = discord.Embed(
-        title=f"{bot.get_emoji(751653673628860476)} Something went wrong on our end and Congressbot has to temporarily "
+        title=f"{bot.get_emoji(Emoji.WARNING.value)} Something went wrong on our end and Congressbot has to temporarily "
               f"shut down. We are sorry for the inconvenience",
         description=f"Reason: {msg}",
         color=0xfff30a)
@@ -484,7 +692,7 @@ async def setannounce(ctx):
     data["Announce_Channel"][str(ctx.guild.id)] = str(ctx.message.channel)
     json.dump(data, open("CongressSaves.json", "w"))
     embedVar = discord.Embed(
-        title=f"{bot.get_emoji(751553187529490513)} Confirmed! The announce channel is {str(ctx.message.channel.name)}!",
+        title=f"{bot.get_emoji(Emoji.OKAY.value)} Confirmed! The announce channel is {str(ctx.message.channel.name)}!",
         color=0x00c943)
     await ctx.send(embed=embedVar)
 
@@ -492,39 +700,20 @@ async def setannounce(ctx):
 # startup
 @bot.event
 async def on_ready():
-    # {i.id: default_time for i in bot.guilds}
-    democracy = ["Democracy is an abuse of statistics.",
-                 "People shouldn't be afraid of their government. Governments should be afraid of their people.",
-                 "The best argument against democracy is a five-minute conversation with the average voter.",
-                 "Democracy must be something more than two wolves and a sheep voting on what to have for dinner.",
-                 "Elections belong to the people. It's their decision. If they decide to turn their back on the fire "
-                 "and burn their behinds, then they will just have to sit on their blisters.",
-                 "I am a firm believer in the people. If given the truth, they can be depended upon to meet any "
-                 "national crisis.", "A vote is like a rifle: its usefulness depends upon the character of the user.",
-                 "Secrecy begets tyranny.", "Democracy is not just the right to vote, it is the right to live in "
-                                            "dignity.",
-                 "The ballot is stronger than the bullet.", "Politics is the art of the possible, the attainable — the "
-                                                            "art of the next best",
-                 "Every election is determined by the people who show up.", "A society without democracy is a society "
-                                                                            "of slaves and fools.",
-                 "Democracy is a device that ensures we shall be governed no better than we deserve.",
-                 "A great democracy has got to be progressive or it will soon cease to be great or a democracy.",
-                 "Democracy is the worst form of government, except for all the others.", "As I would not be a slave, "
-                                                                                          "so I would not be a master. "
-                                                                                          "This expresses my idea of "
-                                                                                          "democracy.",
-                 "Democracy is worth dying for, because it's the most deeply honorable form of government ever devised "
-                 "by man.",
-                 "...I do not want art for a few; any more than education for a few; or freedom for a few...",
-                 "it is the people who control the Government, not the Government the people."]
+    print(bot.get_emoji(Emoji.ERROR.value))
+    democracy = json.load(open("Bot_info.json", "r"))
+    print(democracy["version"])
     print('We have logged in as {0.user}'.format(bot))
     while bot.is_ready():
         await bot.change_presence(activity=discord.Game(name="!help for help"))
         await asyncio.sleep(60)
         await bot.change_presence(activity=discord.Game(name="Created by Alex_123456"))
         await asyncio.sleep(60)
-        await bot.change_presence(activity=discord.Game(name=f'"{democracy[random.randint(0, len(democracy) - 1)]}"'))
+        await bot.change_presence(
+            activity=discord.Game(name=f'"{democracy["quotes"][random.randint(0, len(democracy) - 1)]}"'))
+        await asyncio.sleep(60)
+        await bot.change_presence(activity=discord.Game(name=democracy["version"]))
         await asyncio.sleep(60)
 
 
-bot.run('token')
+bot.run(os.environ['discord_api_key'])
