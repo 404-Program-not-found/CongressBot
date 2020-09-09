@@ -3,9 +3,12 @@ import discord
 import traceback
 from discord.ext import commands
 
-class Utilities():
-    def __init__(self, bot):
+
+class Utilities:
+    def __init__(self, bot, error_emote):
         self.bot = bot
+        self.error_emote = error_emote
+
     def rolefunc(self, ctx):
         try:
             data = json.load(open("CongressSaves.json", "r"))
@@ -15,29 +18,31 @@ class Utilities():
         except KeyError:
             return []
 
-
-    async def errormsg(self, ctx):
+    async def errormsg(self,ctx):
         embedVar = discord.Embed(
-            title=f"{self.bot.get_emoji(751553187453992970)} Invalid Input, type !help for list of commands",
+            title=f"{self.bot.get_emoji(self.error_emote)} Invalid Input, type !help for list of commands",
             color=0xc20000)
         await ctx.send(embed=embedVar)
-
 
     async def error_core(self, ctx, error):
         if isinstance(error, commands.NoPrivateMessage):
             embedVar = discord.Embed(
-                title=f"{self.bot.get_emoji(751553187453992970)} You can only do that in a server!",
+                title=f"{self.bot.get_emoji(self.error_emote)} You can only do that in a server!",
                 color=0xc20000)
             await ctx.send(embed=embedVar)
         elif isinstance(error, commands.CheckFailure):
             embedVar = discord.Embed(
-                title=f"{self.bot.get_emoji(751553187453992970)} You do not have the permission to do that",
+                title=f"{self.bot.get_emoji(self.error_emote)} You do not have the permission to do that",
                 color=0xc20000)
             await ctx.send(embed=embedVar)
         else:
             print('Ignoring exception in command {}:'.format(ctx.command))
             traceback.print_exception(type(error), error, error.__traceback__, )
-            await self.errormsg(ctx)
+            embedVar = discord.Embed(
+                title=f"{self.bot.get_emoji(self.error_emote)} Invalid Input, type !help for list of commands",
+                color=0xc20000)
+            await ctx.send(embed=embedVar)
+
 
 
     def getsave(self, ctx, x, dataname):
