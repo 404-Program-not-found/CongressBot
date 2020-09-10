@@ -6,6 +6,7 @@ import random
 import string
 import traceback
 import json
+import typing
 import os
 from enum import Enum
 import datetime
@@ -246,7 +247,7 @@ class vote_main():
                 "{} Vote Failed to Pass".format(" ".join([roles for roles in role])),
                 embed=sent_message.embeds[0])
             await self.deletedata(bot.get_guild(data_placement["guild_id"]),
-                            json.load(open("CongressVoting.json", "r"))[str(guild_id)].index(data_placement))
+                                  json.load(open("CongressVoting.json", "r"))[str(guild_id)].index(data_placement))
             return
         await bot.get_channel(data_placement["channel_id"]).send(
             "{} Vote Passed".format(" ".join(role)),
@@ -270,7 +271,7 @@ async def vote_error(ctx, error):
 
 
 @bot.command()
-async def help(ctx):
+async def help(ctx, setting: typing.Optional[str] = "dm"):
     embed = discord.Embed(title="Welcome to Congress!", description=" Created by Alex_123456", color=0x0084ff)
     embed.set_thumbnail(url=bot.user.avatar_url)
     embed.add_field(name="!vote(command, users(optional), Description)",
@@ -294,16 +295,22 @@ async def help(ctx):
     embed.add_field(name="Admin Only Commands",
                     value="`!settime (number)`: (Admin only) Sets time of voting for all future votes (default time: 24 hours)\n\n`!settrole "
                           "(@role)`: (Admin only) Sets roles pinged every new vote\n\n `!commandprefix (prefix)`: (Admin onlt) Sets "
-                          "the prefix for commands (default prefix: !)",
+                          "the prefix for commands (default prefix: !)\n\n`!setannounce`: (Admin only) Sets the channel"
+                          " where all congressbot announcements are sent to",
                     inline=True)
     embed.add_field(name="Information Commands",
                     value="`!readtime`: Displays what the current voting time is set to for future votes\n\n`!readroles"
-                          "`: Displays what roles are pined for all future votes",
+                          "`: Displays what roles are pined for all future votes\n\n`!help (setting)`: Sends this "
+                          "information card. Inputting public in the setting field sends this information card to the "
+                          "current channel",
                     inline=True)
     embed.add_field(name="\u200b",
                     value="\u200b",
                     inline=True)
-    
+    if (commands.has_permissions(administrator=True, manage_messages=True,
+                                 manage_roles=True) or commands.is_owner()) and setting.lower() == "public":
+        await ctx.send(embed=embed)
+        return
     await ctx.author.send(embed=embed)
 
 
@@ -313,28 +320,59 @@ async def help(ctx):
 async def multichoice(ctx, setting, *, choices):
     if str(setting).lower() != "open" and str(setting).lower() != "timed":
         multichoice.close()
-    role = util.rolefunc(ctx)
+    role = util.rolefunc(ctx.guild)
     emojis = ["{}\N{COMBINING ENCLOSING KEYCAP}".format(num) for num in range(1, 10)]
     choices = " ".join(choices.split())
     embedVar = discord.Embed(title="Vote", description="Choose between {0}".format(choices),
                              color=0xffbf00)
     waittime = util.getsave(ctx, "Time", "time_value")
-    embedVar.add_field(name="Vote will last for {0}".format(util.convert(waittime)),
-                       value="\u200b")
-    embedVar.set_footer(text=f"Vote Created by {ctx.message.author}", icon_url=ctx.message.author.avatar_url)
+    if str(setting).lower() == 'timed':
+        embedVar.add_field(name="Vote will last for {0}".format(util.convert(waittime)),
+                           value="\u200b")
+    embedVar.set_footer(text=f"Vote Created by {ctx.message.author} • "
+                             + datetime.datetime.utcnow().date().strftime('%d/%b/%Y'),
+                        icon_url=ctx.message.author.avatar_url)
     sent_msg = await ctx.send(" ".join(role), embed=embedVar)
-    choices = choices.split(",")
-    for i in range(len(choices)):
+    choices_str = choices.split(",")
+    for i in range(len(choices_str)):
         await sent_msg.add_reaction(emojis[i])
     if str(setting).lower() == "timed":
-        await asyncio.sleep(waittime)
-        cache = await ctx.fetch_message(id=sent_msg.id)
-        ranges = [cache.reactions[num].count for num in range(0, len(choices))]
-        embedVar = discord.Embed(title="Vote", description="The winning choice is {0}".format(','.join(
-            [choices[i] for i, x in enumerate(ranges) if x == max(ranges)])),
-                                 color=0xffbf00)
-        embedVar.set_footer(text=f"Vote Created by {ctx.message.author}", icon_url=ctx.message.author.avatar_url)
-        await ctx.send(" ".join(role), embed=embedVar)
+        data = json.load(open("multichoice.json", "r"))
+        if not data.get(str(ctx.guild.id)):
+            data[str(ctx.guild.id)] = []
+        print(datetime.datetime.strftime(ctx.message.created_at,
+                                         '%Y-%m-%d %H:%M:%S.%f'))
+        data[str(ctx.guild.id)].append(
+            {'time': datetime.datetime.strftime(ctx.message.created_at + datetime.timedelta(
+                seconds=json.load(open("CongressSaves.json", "r"))['time_value'][str(ctx.guild.id)]),
+                                                '%Y-%m-%d %H:%M:%S.%f'),
+             "choices": list(str(choices.split(",")[i]) for i in range(0, len(choices.split(",")))),
+             "message_id": int(sent_msg.id), "channel_id": int(ctx.message.channel.id),
+             "guild_id": int(ctx.guild.id), "author_id": int(ctx.author.id)})
+        json.dump(data, open("multichoice.json", "w"))
+        await multichoice_processing(len(data[str(ctx.guild.id)]) - 1, str(ctx.guild.id))
+
+
+async def multichoice_processing(placement: int, guild_id: str):
+    data = json.load(open("multichoice.json", "r"))
+    data = data[str(guild_id)][placement]
+    guild = bot.get_guild(data['guild_id'])
+    await discord.utils.sleep_until(datetime.datetime.strptime(data['time'], '%Y-%m-%d %H:%M:%S.%f'))
+    data2 = json.load(open("multichoice.json", "r"))
+    del data2[str(guild.id)][placement]
+    if len(data2[str(guild.id)]) == 0:
+        del data2[str(guild.id)]
+    json.dump(data2, open("multichoice.json", 'w'))
+    cache = await bot.get_channel(data["channel_id"]).fetch_message(id=data["message_id"])
+    ranges = [cache.reactions[num].count for num in range(0, len(data["choices"]))]
+    embedVar = discord.Embed(title="Vote", description="The winning choice is {0}".format(','.join(
+        [data["choices"][i] for i, x in enumerate(ranges) if x == max(ranges)])),
+                             color=0xffbf00)
+    embedVar.set_footer(text=f"Vote Created by {guild.get_member(data['author_id'])} • "
+                             + datetime.datetime.utcnow().date().strftime('%d/%b/%Y'),
+                        icon_url=guild.get_member(data["author_id"]).avatar_url)
+    await bot.get_channel(data["channel_id"]).send(" ".join(util.rolefunc(guild)), embed=embedVar)
+    return
 
 
 @multichoice.error
@@ -583,10 +621,15 @@ async def restart(ctx):
 
 async def restart_process():
     data = json.load(open("CongressVoting.json", "r"))
+    data2 = json.load(open("multichoice.json", "r"))
     for i in data:
         print(i)
         for g in data[i]:
             await vote_main().voting_processing(data[i].index(g), str(g["guild_id"]))
+    for i in data2:
+        print(i)
+        for g in data2[i]:
+            await multichoice_processing(data2[i].index(g), str(g["guild_id"]))
 
 
 @bot.command()
