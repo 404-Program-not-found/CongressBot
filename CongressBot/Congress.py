@@ -53,13 +53,13 @@ class vote_main():
         data = json.load(open("CongressVoting.json", "r"))
         await self.deletedata(guild, position)
         data = data[str(guild.id)][position]
-        command = [data["command"], data["targets"], data['desc']]
+        command = [data["command"].lower, data["targets"], data['desc']]
         author = bot.get_guild(data["guild_id"]).get_member(data["author_id"])
-        if command[0].lower() == "misc" or command[0].lower() == "addchannel":
+        if command[0] == "misc" or command[0] == "addchannel":
             await guild.owner.send(
                 f"A vote in the {guild.name} server has just passed that requires manual implementation",
                 embed=embedVar)
-        elif command[0].lower() == "demote":
+        elif command[0] == "demote":
             if any(guild.me.top_role < bot.get_guild(data["guild_id"]).get_member(int(sl)).top_role for sl in
                    command[1]):
                 print('Permission Error')
@@ -78,7 +78,7 @@ class vote_main():
             for i in command[1]:
                 await bot.get_guild(data["guild_id"]).get_member(int(i)).remove_roles(
                     discord.utils.get(guild.roles, name=string.capwords(str(command[2]))))
-        elif command[0].lower() == "giverole":
+        elif command[0] == "giverole":
             x = False
             print("giverole ")
             if not discord.utils.get(guild.roles, name=string.capwords(str(command[2]))):
@@ -645,6 +645,14 @@ async def setannounce(ctx):
     await ctx.send(embed=embedVar)
 
 
+async def checkready(times):
+    for i in range(0, times):
+        if not bot.is_ready():
+            return False
+        await asyncio.sleep(5)
+    return True
+
+
 # startup
 @bot.event
 async def on_ready():
@@ -655,14 +663,22 @@ async def on_ready():
     print('We have logged in as {0.user}'.format(bot))
     while bot.is_ready():
         await bot.change_presence(activity=discord.Game(name="!help for help"))
-        await asyncio.sleep(60)
+        x = await checkready(12)
+        if not x:
+            return
         await bot.change_presence(activity=discord.Game(name="Created by Alex_123456"))
-        await asyncio.sleep(60)
+        x = await checkready(12)
+        if not x:
+            return
         await bot.change_presence(
             activity=discord.Game(name=f'"{democracy["quotes"][random.randint(0, len(democracy) - 1)]}"'))
-        await asyncio.sleep(60)
+        x = await checkready(12)
+        if not x:
+            return
         await bot.change_presence(activity=discord.Game(name=democracy["version"]))
-        await asyncio.sleep(60)
+        x = await checkready(12)
+        if not x:
+            return
 
 
 bot.run(os.environ['discord_api_key'])
