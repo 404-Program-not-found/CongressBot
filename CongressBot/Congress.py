@@ -11,7 +11,9 @@ import os
 from enum import Enum
 import datetime
 from CongressBot.Congress_Utilities import Utilities
+import logging
 
+logging.basicConfig(filename='output.log',level=logging.INFO)
 
 async def determine_prefix(bot, message):
     guild = message.guild
@@ -62,7 +64,7 @@ class vote_main():
         elif command[0] == "demote":
             if any(guild.me.top_role < bot.get_guild(data["guild_id"]).get_member(int(sl)).top_role for sl in
                    command[1]):
-                print('Permission Error')
+                logging.info('Permission Error')
                 await guild.owner.send(
                     f"A vote in the {guild.name} server has just passed that requires manual rank changes due to "
                     "a permission error, we are sorry for the inconvenience. Tip: to avoid similar errors in the "
@@ -80,14 +82,14 @@ class vote_main():
                     discord.utils.get(guild.roles, name=string.capwords(str(command[2]))))
         elif command[0] == "giverole":
             x = False
-            print("giverole ")
+            logging.info("giverole ")
             if not discord.utils.get(guild.roles, name=string.capwords(str(command[2]))):
                 highest = [command[1][0]]
                 if len(command[1]):
                     for i in range(1, len(command[1])):
                         highest.append(int(command[1][i]))
                     msg = await author.send("What colour do you want the role to be? (reply in hex)")
-                print(highest)
+                logging.info(highest)
 
                 def check(message):
                     return message.author == author and message.channel == msg.channel and re.search(
@@ -99,10 +101,10 @@ class vote_main():
                                                    int(f"0x{reply.content.lower().replace('#', '')}", 0)),
                                                hoist=True,
                                                reason="voted in")
-                print(embedVar)
+                logging.info(embedVar)
                 if any(guild.me.top_role <= bot.get_guild(data["guild_id"]).get_member(int(sl)).top_role for sl in
                        command[1]):
-                    print('Permission Error')
+                    logging.info('Permission Error')
                     await guild.owner.send(
                         f"A vote in the {guild.name} server has just passed that requires manual implementation due to "
                         "a permission error, we are sorry for the inconvenience. Tip: to avoid similar errors in the "
@@ -114,11 +116,11 @@ class vote_main():
                     await bot.get_guild(data["guild_id"]).get_member(int(i)).add_roles(role)
                 for i in range(0, len(highest)):
                     user = user + (bot.get_guild(int(data["guild_id"])).get_member(int(highest[i])).roles)
-                    print(user)
+                    logging.info(user)
                 user = sorted(user, key=lambda r: r.position)
                 highest = discord.utils.find(lambda role: role in guild.roles,
                                              reversed(user))
-                print(highest)
+                logging.info(highest)
                 await role.edit(position=int(highest.position))
                 embedVar = discord.Embed(
                     title=f"{bot.get_emoji(Emoji.OKAY.value)} Confirmed! Role given!",
@@ -134,17 +136,17 @@ class vote_main():
                 user = []
                 for i in range(0, len(highest)):
                     user = user + (bot.get_guild(int(data["guild_id"])).get_member(int(highest[i])).roles)
-                    print(user)
+                    logging.info(user)
                 for i in command[1]:
                     await bot.get_guild(data["guild_id"]).get_member(int(i)).add_roles(role)
                 user = sorted(user, key=lambda r: r.position)
                 highest = discord.utils.find(lambda role: role in guild.roles,
                                              reversed(user))
-                print(highest)
-                print(embedVar)
+                logging.info(highest)
+                logging.info(embedVar)
                 if any(guild.me.top_role <= bot.get_guild(data["guild_id"]).get_member(int(sl)).top_role for sl in
                        command[1]):
-                    print('Permission Error')
+                    logging.info('Permission Error')
                     await guild.owner.send(
                         f"A vote in the {guild.name} server has just passed that requires manual implementation due to a permission error, we are "
                         "sorry for the inconvenience. Tip: to avoid similar errors in the future, move the bot's role in "
@@ -212,7 +214,7 @@ class vote_main():
         other_data = json.load(open("CongressSaves.json", "r"))['time_value'][str(ctx.guild.id)]
         if not data.get(str(ctx.guild.id)):
             data[str(ctx.guild.id)] = []
-        print(datetime.datetime.strftime(ctx.message.created_at,
+        logging.info(datetime.datetime.strftime(ctx.message.created_at,
                                          '%Y-%m-%d %H:%M:%S.%f'))
         data[str(ctx.guild.id)].append(
             {'time': datetime.datetime.strftime(ctx.message.created_at + datetime.timedelta(seconds=other_data),
@@ -235,8 +237,8 @@ class vote_main():
         while not bot.is_ready():
             i = i * 2
             await asyncio.sleep(10)
-            print("error, not connected, retrying in", str(i), "seconds")
-        print(datetime.datetime.strftime(datetime.datetime.utcnow(), '%Y-%m-%d %H:%M:%S.%f'))
+            logging.info("error, not connected, retrying in", str(i), "seconds")
+        logging.info(datetime.datetime.strftime(datetime.datetime.utcnow(), '%Y-%m-%d %H:%M:%S.%f'))
         role = util.rolefunc(bot.get_guild(data_placement["guild_id"]))
         sent_message = await bot.get_channel(data_placement["channel_id"]).fetch_message(data_placement['message_id'])
         if discord.utils.get(sent_message.reactions,
@@ -340,7 +342,7 @@ async def multichoice(ctx, setting, *, choices):
         data = json.load(open("multichoice.json", "r"))
         if not data.get(str(ctx.guild.id)):
             data[str(ctx.guild.id)] = []
-        print(datetime.datetime.strftime(ctx.message.created_at,
+        logging.info(datetime.datetime.strftime(ctx.message.created_at,
                                          '%Y-%m-%d %H:%M:%S.%f'))
         data[str(ctx.guild.id)].append(
             {'time': datetime.datetime.strftime(ctx.message.created_at + datetime.timedelta(
@@ -508,7 +510,7 @@ async def readrole_error(ctx, error):
             color=0xfff30a)
         await ctx.send(embed=embedVar)
     else:
-        print('Ignoring exception in command {}:'.format(ctx.command))
+        logging.info('Ignoring exception in command {}:'.format(ctx.command))
         traceback.print_exception(type(error), error, error.__traceback__, )
         await util.errormsg(ctx)
 
@@ -623,11 +625,11 @@ async def restart_process():
     data = json.load(open("CongressVoting.json", "r"))
     data2 = json.load(open("multichoice.json", "r"))
     for i in data:
-        print(i)
+        logging.info(i)
         for g in data[i]:
             await vote_main().voting_processing(data[i].index(g), str(g["guild_id"]))
     for i in data2:
-        print(i)
+        logging.info(i)
         for g in data2[i]:
             await multichoice_processing(data2[i].index(g), str(g["guild_id"]))
 
@@ -657,10 +659,9 @@ async def checkready(times):
 @bot.event
 async def on_ready():
     await restart_process()
-    print(bot.get_emoji(Emoji.ERROR.value))
     democracy = json.load(open("Bot_info.json", "r"))
-    print(democracy["version"])
-    print('We have logged in as {0.user}'.format(bot))
+    logging.info(democracy["version"])
+    logging.info('We have logged in as {0.user}'.format(bot))
     while bot.is_ready():
         await bot.change_presence(activity=discord.Game(name="!help for help"))
         x = await checkready(12)
